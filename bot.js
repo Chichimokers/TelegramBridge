@@ -88,12 +88,6 @@ whatsappClient.on('message', async (msg) => {
 // Telegram → WhatsApp: Descargar y enviar archivos
 telegramBot.on('message', async (msg) => {
   try {
-    // Asegurarse de que el cliente de WhatsApp esté listo
-    if (!whatsappClient.info) {
-      console.error('Cliente de WhatsApp no está listo.');
-      telegramBot.sendMessage(telegramChatId, '❌ Cliente de WhatsApp no está listo.');
-      return;
-    }
 
     if (msg.photo || msg.document || msg.video || msg.audio) {
       let fileId, fileName, mimeType;
