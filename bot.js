@@ -16,7 +16,7 @@ if (fs.existsSync(SESSION_FILE_PATH)) {
 // Configuración
 const telegramToken = '6587799120:AAHy5m6vwFo1zX2odV1nBuzuuncgxCzNrk0';
 const telegramChatId = '624861458';
-const myWhatsappNumber = '5358126024@c.us'; // Asegúrate de tener el formato correcto
+const myWhatsappNumber = '5358126024@c.us'; // Formato correcto: <número>@c.us
 
 // Inicializar bots
 const telegramBot = new TelegramBot(telegramToken, { polling: true });
@@ -53,6 +53,10 @@ whatsappClient.on('message', async (msg) => {
   if (msg.hasMedia) {
     try {
       const media = await msg.downloadMedia();
+      if (!media || !media.data) {
+        console.error('No se pudo descargar el media.');
+        return;
+      }
       const buffer = Buffer.from(media.data, 'base64');
 
       // Calcular tamaño del archivo en KB
@@ -84,6 +88,13 @@ whatsappClient.on('message', async (msg) => {
 // Telegram → WhatsApp: Descargar y enviar archivos
 telegramBot.on('message', async (msg) => {
   try {
+    // Asegurarse de que el cliente de WhatsApp esté listo
+    if (!whatsappClient.info) {
+      console.error('Cliente de WhatsApp no está listo.');
+      telegramBot.sendMessage(telegramChatId, '❌ Cliente de WhatsApp no está listo.');
+      return;
+    }
+
     if (msg.photo || msg.document || msg.video || msg.audio) {
       let fileId, fileName, mimeType;
       
@@ -108,12 +119,12 @@ telegramBot.on('message', async (msg) => {
       // Descargar archivo de Telegram
       const fileLink = await telegramBot.getFileLink(fileId);
       const response = await axios.get(fileLink, { responseType: 'arraybuffer' });
-      const media = new MessageMedia(
-        mimeType,
-        Buffer.from(response.data).toString('base64'),
-        fileName
-      );
+      const base64Data = Buffer.from(response.data).toString('base64');
 
+      // Crear objeto MessageMedia según la documentación
+      const media = new MessageMedia(mimeType, base64Data, fileName);
+
+      // Enviar a WhatsApp
       await whatsappClient.sendMessage(myWhatsappNumber, media);
       telegramBot.sendMessage(telegramChatId, `✅ Archivo enviado a WhatsApp: ${fileName}`);
     }
