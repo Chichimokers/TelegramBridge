@@ -1,137 +1,89 @@
-const fs = require('fs');
-const { Client, MessageMedia } = require('whatsapp-web.js');
+const { Client, MessageMedia } = require('whatsapp-web.js'); 
 const TelegramBot = require('node-telegram-bot-api');
 const qrcode = require('qrcode-terminal');
-const axios = require('axios');
+const axios = require('axios'); // Para enviar el SMS
 
-// Archivo para almacenar la sesión de WhatsApp
-const SESSION_FILE_PATH = './whatsapp-session.json';
-let sessionData;
-
-// Cargar la sesión si existe
-if (fs.existsSync(SESSION_FILE_PATH)) {
-  sessionData = require(SESSION_FILE_PATH);
-}
-
-// Configuración
+// Configura el bot de Telegram
 const telegramToken = '6587799120:AAHy5m6vwFo1zX2odV1nBuzuuncgxCzNrk0';
 const telegramChatId = '624861458';
-const myWhatsappNumber = '5358126024@c.us'; // Formato correcto: <número>@c.us
-
-// Inicializar bots
 const telegramBot = new TelegramBot(telegramToken, { polling: true });
+
+// Configura el cliente de WhatsApp
 const whatsappClient = new Client({
   puppeteer: { headless: true },
-  session: sessionData
 });
 
-// Manejo de eventos de WhatsApp
+// Genera QR para vincular WhatsApp
+whatsappClient.on('qr', (qr) => qrcode.generate(qr, { small: true }));
 
-// Si no hay sesión, se genera el QR
-whatsappClient.on('qr', qr => {
-  qrcode.generate(qr, { small: true });
-  console.log('Escanea el código QR para iniciar sesión.');
+// Cuando WhatsApp esté listo
+whatsappClient.on('ready', () => {
+  console.log('WhatsApp conectado!');
 });
 
-// Al autenticarse, guardar la sesión en un archivo
-whatsappClient.on('authenticated', (session) => {
-  console.log('WhatsApp autenticado!');
-  sessionData = session;
-  fs.writeFile(SESSION_FILE_PATH, JSON.stringify(session), (err) => {
-    if (err) {
-      console.error('Error al guardar la sesión:', err);
-    } else {
-      console.log('Sesión guardada correctamente en', SESSION_FILE_PATH);
-    }
-  });
-});
+// Función para enviar SMS utilizando Textbelt
+async function sendSMS(destino, mensaje) {
+  try {
+    const response = await axios.post('https://textbelt.com/text', {
+      phone: destino,
+      message: mensaje,
+      key: 'textbelt' // Clave gratuita (limitada a un mensaje por día)
+    });
+    console.log('Respuesta SMS:', response.data);
+  } catch (error) {
+    console.error('Error enviando SMS:', error);
+  }
+}
 
-whatsappClient.on('ready', () => console.log('WhatsApp conectado!'));
-
-// WhatsApp → Telegram: Enviar archivos y metadatos
+// Escucha mensajes entrantes
 whatsappClient.on('message', async (msg) => {
-  if (msg.hasMedia) {
-    try {
+  try {
+    // Si el mensaje proviene de un grupo, el remitente real puede estar en msg.author
+    const contact = await msg.getContact();
+    const senderId = contact.id._serialized;
+    const senderNumber = contact.number || senderId.split('@')[0];
+    const senderName = contact.pushname || contact.name || 'Usuario desconocido';
+    const profilePicUrl = await contact.getProfilePicUrl();
+    const isBusiness = contact.isBusiness;
+    const isMyContact = contact.isMyContact;
+    
+    // Construir información del remitente
+    const info = `📤 Enviado por: ${senderName} (${senderNumber})
+ID: ${senderId}
+¿Es contacto? ${isMyContact ? 'Sí' : 'No'}
+¿Es cuenta de negocio? ${isBusiness ? 'Sí' : 'No'}
+Foto de perfil: ${profilePicUrl || 'No disponible'}`;
+    
+    console.log(info);
+    
+    // Nueva funcionalidad: si el mensaje es de un contacto específico, enviar SMS
+    if (senderNumber === '54873139') {
+      await sendSMS('58126024', 'tienes notificacion de yunikua');
+    }
+    
+    // Procesa medios (imágenes, videos, documentos) si están presentes
+    if (msg.hasMedia) {
       const media = await msg.downloadMedia();
-      if (!media || !media.data) {
-        console.error('No se pudo descargar el media.');
-        return;
-      }
       const buffer = Buffer.from(media.data, 'base64');
-
-      // Calcular tamaño del archivo en KB
-      const fileSizeBytes = Buffer.byteLength(buffer);
-      const fileSizeKB = (fileSizeBytes / 1024).toFixed(2);
-
-      const contact = await msg.getContact();
-      const caption = `📤 De: ${contact.pushname} (${msg.from.split('@')[0]})
-📄 Archivo: ${media.filename || 'Sin nombre'}
-📝 Tipo: ${media.mimetype}
-📏 Tamaño: ${fileSizeKB} KB`;
-
+      
+      let caption = info;
+      if (media.filename) {
+        caption += `\n📄 Archivo: ${media.filename}`;
+      }
+      
       if (media.mimetype.startsWith('image/')) {
         await telegramBot.sendPhoto(telegramChatId, buffer, { caption });
       } else if (media.mimetype.startsWith('video/')) {
         await telegramBot.sendVideo(telegramChatId, buffer, { caption });
-      } else if (media.mimetype.startsWith('audio/')) {
-        await telegramBot.sendAudio(telegramChatId, buffer, { caption });
       } else {
-        await telegramBot.sendDocument(telegramChatId, buffer, { caption, filename: media.filename || 'documento' });
+        await telegramBot.sendDocument(telegramChatId, buffer, { caption, filename: media.filename });
       }
-    } catch (error) {
-      console.error('Error WhatsApp → Telegram:', error);
-      telegramBot.sendMessage(telegramChatId, '❌ Error al enviar archivo de WhatsApp a Telegram');
-    }
-  }
-});
-
-// Telegram → WhatsApp: Descargar y enviar archivos
-telegramBot.on('message', async (msg) => {
-  try {
-
-    if (msg.photo || msg.document || msg.video || msg.audio) {
-      let fileId, fileName, mimeType;
       
-      if (msg.photo) {
-        fileId = msg.photo[msg.photo.length - 1].file_id;
-        fileName = `photo_${Date.now()}.jpg`;
-        mimeType = 'image/jpeg';
-      } else if (msg.document) {
-        fileId = msg.document.file_id;
-        fileName = msg.document.file_name;
-        mimeType = msg.document.mime_type;
-      } else if (msg.video) {
-        fileId = msg.video.file_id;
-        fileName = `video_${Date.now()}.mp4`;
-        mimeType = 'video/mp4';
-      } else if (msg.audio) {
-        fileId = msg.audio.file_id;
-        fileName = `audio_${Date.now()}.mp3`;
-        mimeType = msg.audio.mime_type || 'audio/mpeg';
-      }
-
-      // Descargar archivo de Telegram
-      const fileLink = await telegramBot.getFileLink(fileId);
-      const response = await axios.get(fileLink, { responseType: 'arraybuffer' });
-      const base64Data = Buffer.from(response.data).toString('base64');
-
-      // Crear objeto MessageMedia según la documentación
-      const media = new MessageMedia(mimeType, base64Data, fileName);
-
-      // Enviar a WhatsApp
-      await whatsappClient.sendMessage(myWhatsappNumber, media);
-      telegramBot.sendMessage(telegramChatId, `✅ Archivo enviado a WhatsApp: ${fileName}`);
+      console.log('Archivo enviado a Telegram');
     }
   } catch (error) {
-    console.error('Error Telegram → WhatsApp:', error);
-    telegramBot.sendMessage(telegramChatId, '❌ Error al enviar el archivo a WhatsApp');
+    console.error('Error:', error);
   }
-});
-
-// Manejo de desconexiones y reconexiones en WhatsApp
-whatsappClient.on('disconnected', () => {
-  console.log('WhatsApp desconectado, reiniciando...');
-  whatsappClient.initialize();
 });
 
 whatsappClient.initialize();
