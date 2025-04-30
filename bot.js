@@ -45,7 +45,7 @@ if (!phoneNumber.startsWith('+')) {
 }
 
 // Crear directorio de sesiones
-const sessionPath = path.join(__dirname, `wwebjs_sessions/${phoneNumber}`);
+const sessionPath = path.join(__dirname, `wwebjs_sessions/${"Erne"}`);
 if (!fs.existsSync(sessionPath)) {
   fs.mkdirSync(sessionPath, { recursive: true });
   fs.chmodSync(sessionPath, 0o777);
