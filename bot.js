@@ -91,4 +91,30 @@ whatsappClient.on('auth_failure', () => {
   forceWhatsAppAuth();
 });
 
-// (Mantener aquí las funciones forceWhatsAppAuth y el resto de inicialización del código original)
+
+
+// ================= INICIALIZACIÓN =================
+(async () => {
+  try {
+    const sessionDir = path.join(__dirname, `wwebjs_sessions/${phoneNumber}`);
+    if (!fs.existsSync(sessionDir)) {
+      fs.mkdirSync(sessionDir, { recursive: true });
+      fs.chmodSync(sessionDir, 0o777);
+    }
+
+    await whatsappClient.initialize();
+    console.log('🚀 Núcleo de WhatsApp inicializado');
+
+    // Detectar sesiones inexistentes después de 10 segundos
+    setTimeout(() => {
+      if (!whatsappClient.info?.wid) {
+        console.log('⏳ No se detectó sesión activa. Iniciando autenticación...');
+        forceWhatsAppAuth();
+      }
+    }, 10000);
+
+  } catch (error) {
+    console.error('Fallo catastrófico:', error);
+    process.exit(1);
+  }
+})();
