@@ -1,4 +1,4 @@
-const phoneNumbers = '+5363735309'; // Número internacional
+const phoneNumbers = '5358126024'; // Número internacional
 const phoneNumber = "Erne";
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const TelegramBot = require('node-telegram-bot-api');
