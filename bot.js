@@ -91,8 +91,8 @@ async function verificarYEnviarEstado() {
       
       if (cambioEstado) {
         mensajeEstado = estaEnLinea 
-          ? `🟢 *${contact.pushname} está CONECTADO*`
-          : `🔴 *${contact.pushname} se DESCONECTÓ*`;
+          ? `🟢 *${contact.name} está CONECTADO*`
+          : `🔴 *${contact.name} se DESCONECTÓ*`;
       }
 
       const mensajeConexion = `⏳ Última vez: ${ultimaConexion}`;
