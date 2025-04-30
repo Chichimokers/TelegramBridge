@@ -4,7 +4,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const axios = require('axios');
 const path = require('path');
 const { Boom } = require('@hapi/boom');
-
+const fs = require('fs');
 // Configuración
 const targetUser = '5359057080@c.us';
 const grupoDestino = 'Proyecto X';
