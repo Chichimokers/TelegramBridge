@@ -48,21 +48,9 @@ const rl = readline.createInterface({
 async function forceWhatsAppAuth() {
   try {
     console.log('🔥 Iniciando autenticación forzada...');
-    
-    // Generar código de vinculación
     const pairingCode = await whatsappClient.requestPairingCode(phoneNumbers);
     console.log(`\n✅ CÓDIGO DE 8 DÍGITOS: ${pairingCode}`);
     console.log('📱 Ingresar en WhatsApp: Configuración → Dispositivos vinculados → Vincular dispositivo');
-
-    // Verificar conexión cada 3 segundos
-    const connectionChecker = setInterval(async () => {
-      if (whatsappClient.info?.wid) {
-        clearInterval(connectionChecker);
-        console.log('⚡ Conexión validada!');
-        iniciarProgramador();
-      }
-    }, 3000);
-
   } catch (error) {
     console.error('❌ Error crítico:', error);
     if (error instanceof Boom) console.error('Detalles técnicos:', error.output.payload);
@@ -76,6 +64,12 @@ whatsappClient.on('ready', () => {
   iniciarProgramador();
 });
 
+whatsappClient.on('auth_failure', () => {
+  console.log('⚠️ Autenticación fallida. Forzando nueva autenticación...');
+  forceWhatsAppAuth();
+});
+
+
 async function verificarYEnviarEstado() {
   try {
     const contact = await whatsappClient.getContactById(targetUser);
@@ -87,7 +81,7 @@ async function verificarYEnviarEstado() {
 🟢 En línea: ${contact.isOnline ? 'Sí' : 'No'}
 ⏳ Última conexión: ${ultimaConexion}
 📅 Actualizado: ${new Date().toLocaleString()}`;
-
+    console.log(mensaje)
     const grupo = (await whatsappClient.getChats()).find(chat => 
       chat.isGroup && chat.name.toLowerCase() === grupoDestino.toLowerCase()
     );
@@ -112,31 +106,25 @@ function iniciarProgramador() {
 // ================= INICIALIZACIÓN =================
 (async () => {
   try {
-    // Configurar directorio de sesiones
     const sessionDir = path.join(__dirname, `wwebjs_sessions/${phoneNumber}`);
     if (!fs.existsSync(sessionDir)) {
       fs.mkdirSync(sessionDir, { recursive: true });
       fs.chmodSync(sessionDir, 0o777);
     }
 
-    // Iniciar cliente
     await whatsappClient.initialize();
     console.log('🚀 Núcleo de WhatsApp inicializado');
-    
-    // Forzar autenticación
-    await forceWhatsAppAuth();
+
+    // Detectar sesiones inexistentes después de 10 segundos
+    setTimeout(() => {
+      if (!whatsappClient.info?.wid) {
+        console.log('⏳ No se detectó sesión activa. Iniciando autenticación...');
+        forceWhatsAppAuth();
+      }
+    }, 10000);
 
   } catch (error) {
     console.error('Fallo catastrófico:', error);
     process.exit(1);
   }
 })();
-
-// ================= MANEJO DE EVENTOS CRÍTICOS =================
-process.on('uncaughtException', (err) => {
-  console.error('⚠️ Excepción no capturada:', err);
-});
-
-process.on('unhandledRejection', (reason) => {
-  console.error('⚠️ Promesa rechazada:', reason);
-});
