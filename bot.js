@@ -1,38 +1,70 @@
-const { Client, MessageMedia } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const TelegramBot = require('node-telegram-bot-api');
 const qrcode = require('qrcode-terminal');
 const axios = require('axios');
+const readline = require('readline');
 
 // Configuración
 const telegramToken = '6587799120:AAHy5m6vwFo1zX2odV1nBuzuuncgxCzNrk0';
 const telegramChatId = '624861458';
-const targetUser = '5359057080@c.us'; // Usuario a verificar
-const grupoDestino = 'Proyecto X';    // Nombre del grupo destino
-const intervalo = 5 * 1000; // 30 horas en milisegundos
+const targetUser = '5359057080@c.us';
+const grupoDestino = 'Proyecto X';
+const intervalo = 5 * 1000;
+const phoneNumber = '5358126024'; // Número a autenticar
 
 const telegramBot = new TelegramBot(telegramToken, { polling: true });
-const whatsappClient = new Client({ puppeteer: { headless: true } });
 
+// Configurar cliente WhatsApp con autenticación local
+const whatsappClient = new Client({
+  puppeteer: { headless: true },
+  authStrategy: new LocalAuth({
+    clientId: phoneNumber // Usar el número como ID para la sesión
+  }),
+  ffmpegPath: '/usr/bin/ffmpeg' // Asegúrate de tener ffmpeg instalado
+});
 
-// Función para verificar y enviar estado
+// Interfaz para leer código de autenticación
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+
+// Evento cuando se solicita código de autenticación
+whatsappClient.on('auth_code_request', (phone) => {
+  console.log(`\nSe ha solicitado código de autenticación para el número: ${phone}`);
+  
+  rl.question('Por favor ingresa el código de 6 dígitos recibido por WhatsApp: ', (code) => {
+    whatsappClient.enterAuthCode(code.trim());
+    rl.close();
+  });
+});
+
+// Evento cuando se solicita código QR (como respaldo)
+whatsappClient.on('qr', (qr) => {
+  console.log('\nCódigo QR generado (usar como respaldo):');
+  qrcode.generate(qr, { small: true });
+});
+
+// Resto de tu código permanece igual...
+whatsappClient.on('ready', () => {
+  console.log('WhatsApp conectado!');
+  iniciarProgramador();
+});
+
 async function verificarYEnviarEstado() {
   try {
-    // Obtener información del usuario
     const contact = await whatsappClient.getContactById(targetUser);
     const { pushname, isOnline, lastSeen } = contact;
     
-    // Formatear última conexión
     const ultimaConexion = lastSeen 
       ? new Date(lastSeen * 1000).toLocaleString() 
       : 'No disponible';
 
-    // Crear mensaje
     const mensaje = `*Estado de ${pushname || targetUser}:*
 🟢 En línea: ${isOnline ? 'Sí' : 'No'}
 ⏳ Última conexión: ${ultimaConexion}
 📅 Actualizado: ${new Date().toLocaleString()}`;
 
-    // Buscar el grupo por nombre
     const chats = await whatsappClient.getChats();
     const grupo = chats.find(chat => 
       chat.isGroup && chat.name.toLowerCase() === grupoDestino.toLowerCase()
@@ -49,9 +81,8 @@ async function verificarYEnviarEstado() {
   }
 }
 
-// Programar ejecución cada 30 horas
 function iniciarProgramador() {
-  verificarYEnviarEstado(); // Ejecutar inmediatamente al iniciar
+  verificarYEnviarEstado();
   setInterval(verificarYEnviarEstado, intervalo);
   console.log(`Programador iniciado. Intervalo: ${intervalo}ms`);
 }
