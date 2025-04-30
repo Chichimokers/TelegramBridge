@@ -36,6 +36,7 @@ const rl = readline.createInterface({
 
 // ================= AUTENTICACIÓN POR TELÉFONO =================
 whatsappClient.on('state_change', async (state) => {
+  console.log('[DEBUG] Estado actual:', WAState[state]);
   if ([WAState.UNPAIRED, WAState.UNPAIRED_IDLE].includes(state)) {
     try {
       const pairingCode = await whatsappClient.requestPairingCode(phoneNumbers);
