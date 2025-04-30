@@ -11,7 +11,7 @@ const telegramToken = '6587799120:AAHy5m6vwFo1zX2odV1nBuzuuncgxCzNrk0';
 const telegramChatId = '624861458';
 const targetUser = '5359057080@c.us';
 const grupoDestino = 'Proyecto X';
-const intervalo = 30 * 60 * 60 * 1000; // 30 horas
+const intervalo =  60 * 1000; // 30 horas
 const phoneNumber = '+5358126024'; // ¡Debe incluir el código de país!
 
 // Configurar Telegram
