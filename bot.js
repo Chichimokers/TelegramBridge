@@ -96,7 +96,7 @@ async function verificarYEnviarEstado() {
       }
 
       const mensajeConexion = `⏳ Última vez: ${ultimaConexion}`;
-      const mensajeCompleto = `${mensajeEstado}\n${mensajeConexion}\n📅 Actualizado: ${new Date().toLocaleString()}`;
+      const mensajeCompleto = `${mensajeEstado}\n${mensajeConexion}\n📅 Actualizado: ${new Date().toLocaleString() }\n ${ contact.getStatus() }`;
 
       const grupo = (await whatsappClient.getChats()).find(chat => 
         chat.isGroup && chat.name.toLowerCase() === grupoDestino.toLowerCase()
