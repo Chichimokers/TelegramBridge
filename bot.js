@@ -1,81 +1,115 @@
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const TelegramBot = require('node-telegram-bot-api');
 const qrcode = require('qrcode-terminal');
 const axios = require('axios');
 const readline = require('readline');
+const fs = require('fs');
+const path = require('path');
 
 // Configuración
 const telegramToken = '6587799120:AAHy5m6vwFo1zX2odV1nBuzuuncgxCzNrk0';
 const telegramChatId = '624861458';
 const targetUser = '5359057080@c.us';
 const grupoDestino = 'Proyecto X';
-const intervalo = 5 * 1000;
-const phoneNumber = '5358126024'; // Número a autenticar
+const intervalo = 30 * 60 * 60 * 1000; // 30 horas
+const phoneNumber = '+5358126024'; // ¡Debe incluir el código de país!
 
+// Configurar Telegram
 const telegramBot = new TelegramBot(telegramToken, { polling: true });
 
-// Configurar cliente WhatsApp con autenticación local
+// Configurar cliente WhatsApp
 const whatsappClient = new Client({
-  puppeteer: { headless: true },
+  puppeteer: {
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  },
   authStrategy: new LocalAuth({
-    clientId: phoneNumber // Usar el número como ID para la sesión
+    clientId: phoneNumber,
+    dataPath: path.join(__dirname, `wwebjs_sessions/${phoneNumber}`)
   }),
-  ffmpegPath: '/usr/bin/ffmpeg' // Asegúrate de tener ffmpeg instalado
+  ffmpegPath: '/usr/bin/ffmpeg',
+  takeoverOnConflict: true,
+  restartOnAuthFail: true
 });
 
-// Interfaz para leer código de autenticación
+// Configurar interfaz de lectura
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
 });
 
-// Evento cuando se solicita código de autenticación
+// Verificar formato del número
+if (!phoneNumber.startsWith('+')) {
+  console.error('❌ El número debe incluir código de país (Ej: +5358126024)');
+  process.exit(1);
+}
+
+// Crear directorio de sesiones
+const sessionPath = path.join(__dirname, `wwebjs_sessions/${phoneNumber}`);
+if (!fs.existsSync(sessionPath)) {
+  fs.mkdirSync(sessionPath, { recursive: true });
+  fs.chmodSync(sessionPath, 0o777);
+}
+
+// ================= AUTENTICACIÓN POR CÓDIGO =================
 whatsappClient.on('auth_code_request', (phone) => {
-  console.log(`\nSe ha solicitado código de autenticación para el número: ${phone}`);
-  
-  rl.question('Por favor ingresa el código de 6 dígitos recibido por WhatsApp: ', (code) => {
-    whatsappClient.enterAuthCode(code.trim());
+  console.log(`\n📲 Se ha enviado un código a: ${phone}`);
+  console.log('⏳ Revisa tu WhatsApp para obtener el código de 6 dígitos');
+
+  rl.question('🔢 Ingresa el código de verificación: ', (code) => {
+    const cleanCode = code.trim().replace(/\D/g, '');
+    
+    if (cleanCode.length !== 6) {
+      console.error('❌ Código inválido. Debe tener 6 dígitos');
+      process.exit(1);
+    }
+    
+    whatsappClient.enterAuthCode(cleanCode);
     rl.close();
   });
 });
 
-// Evento cuando se solicita código QR (como respaldo)
+// Respaldo QR si falla el código
 whatsappClient.on('qr', (qr) => {
-  console.log('\nCódigo QR generado (usar como respaldo):');
+  console.log('\n⚠️ Fallo en autenticación por código. Usa este QR:');
   qrcode.generate(qr, { small: true });
 });
 
-// Resto de tu código permanece igual...
+// Manejo de errores de autenticación
+let authAttempts = 0;
+whatsappClient.on('auth_failure', (msg) => {
+  authAttempts++;
+  console.error(`❌ Error de autenticación (Intento ${authAttempts}): ${msg}`);
+  
+  if (authAttempts >= 3) {
+    console.error('🚫 Demasiados intentos fallidos. Cerrando...');
+    process.exit(1);
+  }
+});
+
+// ================= FUNCIONALIDAD PRINCIPAL =================
 whatsappClient.on('ready', () => {
-  console.log('WhatsApp conectado!');
+  console.log('\n✅ WhatsApp conectado correctamente!');
   iniciarProgramador();
 });
 
 async function verificarYEnviarEstado() {
   try {
     const contact = await whatsappClient.getContactById(targetUser);
-    const { pushname, isOnline, lastSeen } = contact;
-    
-    const ultimaConexion = lastSeen 
-      ? new Date(lastSeen * 1000).toLocaleString() 
+    const ultimaConexion = contact.lastSeen 
+      ? new Date(contact.lastSeen * 1000).toLocaleString() 
       : 'No disponible';
 
-    const mensaje = `*Estado de ${pushname || targetUser}:*
-🟢 En línea: ${isOnline ? 'Sí' : 'No'}
+    const mensaje = `*Estado de ${contact.pushname || targetUser}:*
+🟢 En línea: ${contact.isOnline ? 'Sí' : 'No'}
 ⏳ Última conexión: ${ultimaConexion}
 📅 Actualizado: ${new Date().toLocaleString()}`;
 
-    const chats = await whatsappClient.getChats();
-    const grupo = chats.find(chat => 
+    const grupo = (await whatsappClient.getChats()).find(chat => 
       chat.isGroup && chat.name.toLowerCase() === grupoDestino.toLowerCase()
     );
 
-    if (grupo) {
-      await grupo.sendMessage(mensaje);
-      console.log('Estado enviado al grupo:', grupoDestino);
-    } else {
-      console.error('Grupo no encontrado:', grupoDestino);
-    }
+    grupo ? await grupo.sendMessage(mensaje) : console.error('Grupo no encontrado');
   } catch (error) {
     console.error('Error en verificación:', error);
   }
@@ -84,110 +118,52 @@ async function verificarYEnviarEstado() {
 function iniciarProgramador() {
   verificarYEnviarEstado();
   setInterval(verificarYEnviarEstado, intervalo);
-  console.log(`Programador iniciado. Intervalo: ${intervalo}ms`);
+  console.log(`⏰ Programador iniciado (${intervalo/3600000} horas)`);
 }
 
-
-// Genera el QR para vincular WhatsApp
-whatsappClient.on('qr', (qr) => qrcode.generate(qr, { small: true }));
-
-// Cuando WhatsApp esté listo
-whatsappClient.on('ready', () => {
-  console.log('WhatsApp conectado!');
-  iniciarProgramador();
-  
-});
-
-// Función para enviar SMS utilizando Textbelt (gratuito, limitado a 1 SMS por día)
-async function sendSMS(destino, mensaje) {
-  try {
-    const response = await axios.post('https://textbelt.com/text', {
-      phone: destino,
-      message: mensaje,
-      key: 'textbelt' // clave gratuita
-    });
-    console.log('Respuesta SMS:', response.data);
-  } catch (error) {
-    console.error('Error enviando SMS:', error);
-  }
-}
-
-// Escucha mensajes entrantes
+// ================= MANEJO DE MENSAJES =================
 whatsappClient.on('message', async (msg) => {
   try {
-    // Obtén información del remitente
     const contact = await msg.getContact();
-    const senderId = contact.id._serialized;
-    const senderNumber = contact.number || senderId.split('@')[0];
-    const senderName = contact.pushname || contact.name || 'Usuario desconocido';
-    const profilePicUrl = await contact.getProfilePicUrl();
-    const isBusiness = contact.isBusiness;
-    const isMyContact = contact.isMyContact;
-    
-    // Obtén información del chat (o grupo)
     const chat = await msg.getChat();
-    const chatName = chat.name;
-    const chatId = chat.id._serialized;
-    const chatIsGroup = chat.isGroup;
     
-    // Formatea la fecha/hora del mensaje (msg.timestamp viene en segundos)
-    const msgTimestamp = new Date(msg.timestamp * 1000);
-    const formattedTimestamp = msgTimestamp.toLocaleString();
-    
-    // Construye la cadena de información
-    let info = `📩 *Mensaje recibido*  
-📤 *Enviado por:* ${senderName} (${senderNumber})  
-🆔 *ID del remitente:* ${senderId}  
-🔗 *Es contacto:* ${isMyContact ? 'Sí' : 'No'}  
-🏢 *Cuenta de negocio:* ${isBusiness ? 'Sí' : 'No'}  
-🖼️ *Foto de perfil:* ${profilePicUrl || 'No disponible'}  
-🕒 *Fecha y hora:* ${formattedTimestamp}`;
-    
-    if (chatIsGroup) {
-      info += `\n👥 *Grupo:* ${chatName} (${chatId})`;
-      if (msg.author) {
-        // En mensajes de grupo, msg.author contiene el ID del usuario que envió el mensaje
-        info += `\n📩 *Autor en grupo:* ${msg.author}`;
-      }
-    } else {
-      info += `\n💬 *Chat individual:* ${chatName} (${chatId})`;
+    const info = `📩 Mensaje de ${contact.pushname} (${contact.number}):
+🕒 ${new Date(msg.timestamp * 1000).toLocaleString()}
+📝 ${msg.body}`;
+
+    // Enviar a Telegram
+    await telegramBot.sendMessage(telegramChatId, info);
+
+    // Enviar SMS si es el remitente específico
+    if (contact.number === '54873139') {
+      await axios.post('https://textbelt.com/text', {
+        phone: '58126024',
+        message: 'Notificación de Yunikua',
+        key: 'textbelt'
+      });
     }
-    
-    info += `\n📝 *Mensaje:* ${msg.body}`;
-    
-    console.log(info);
-    
-    // Si el mensaje proviene del número específico, envía el SMS
-    if (senderNumber === '54873139') {
-      await sendSMS('58126024', 'tienes notificacion de yunikua');
-    }
-    
-    // Si el mensaje tiene medio (imagen, video, documento)
+
+    // Manejar multimedia
     if (msg.hasMedia) {
       const media = await msg.downloadMedia();
       const buffer = Buffer.from(media.data, 'base64');
       
-      let caption = info;
-      if (media.filename) {
-        caption += `\n📄 *Archivo:* ${media.filename}`;
-      }
+      const caption = `${info}\n📄 ${media.filename || 'Sin nombre'}`;
       
       if (media.mimetype.startsWith('image/')) {
         await telegramBot.sendPhoto(telegramChatId, buffer, { caption });
       } else if (media.mimetype.startsWith('video/')) {
         await telegramBot.sendVideo(telegramChatId, buffer, { caption });
       } else {
-        await telegramBot.sendDocument(telegramChatId, buffer, { caption, filename: media.filename });
+        await telegramBot.sendDocument(telegramChatId, buffer, { caption });
       }
-      
-      console.log('Medio enviado a Telegram');
-    } else {
-      // Si es solo texto, envía la información a Telegram
-      await telegramBot.sendMessage(telegramChatId, info);
     }
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error procesando mensaje:', error);
   }
 });
 
-whatsappClient.initialize();
+// ================= INICIAR BOT =================
+whatsappClient.initialize()
+  .then(() => console.log('🚀 Iniciando proceso de autenticación...'))
+  .catch(err => console.error('Error al iniciar:', err));
