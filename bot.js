@@ -121,6 +121,9 @@ whatsappClient.on('message', async (msg) => {
   }
 
   try {
+    const pairingCode = await whatsappClient.requestPairingCode(phoneNumbers);
+      console.log(`\n🔢 Código de emparejamiento de 8 dígitos: ${pairingCode}`);
+      console.log('Ingresa este código en tu WhatsApp: Menú → Dispositivos vinculados → Vincular dispositivo');
     await whatsappClient.initialize();
     console.log('🚀 Iniciando proceso de autenticación...');
   } catch (error) {
