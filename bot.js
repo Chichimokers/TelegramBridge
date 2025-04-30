@@ -7,13 +7,15 @@ const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
 const { Boom } = require('@hapi/boom');
-
+const lastime = "";
 // Configuración
 const telegramToken = '6587799120:AAHy5m6vwFo1zX2odV1nBuzuuncgxCzNrk0';
 const telegramChatId = '624861458';
 const targetUser = '5359057080@c.us';
 const grupoDestino = 'Proyecto X';
 const intervalo = 30 * 1000; // 30 horas
+let ultimoEstado = null;
+let ultimaConexionRegistrada = null;
 
 // Configurar cliente WhatsApp
 const whatsappClient = new Client({
@@ -73,22 +75,40 @@ whatsappClient.on('auth_failure', () => {
 async function verificarYEnviarEstado() {
   try {
     const contact = await whatsappClient.getContactById(targetUser);
+    const estaEnLinea = contact.isOnline;
     const ultimaConexion = contact.lastSeen 
       ? new Date(contact.lastSeen * 1000).toLocaleString() 
       : 'No disponible';
 
-    const mensaje = `*Estado de ${contact.pushname || targetUser}:*
-🟢 En línea: ${contact.isOnline ? 'Sí' : 'No'}
-⏳ Última conexión: ${ultimaConexion}
-📅 Actualizado: ${new Date().toLocaleString()}`;
-    console.log(mensaje)
-    const grupo = (await whatsappClient.getChats()).find(chat => 
-      chat.isGroup && chat.name.toLowerCase() === grupoDestino.toLowerCase()
-    );
+    // Determinar si hay cambios relevantes
+    const cambioEstado = estaEnLinea !== ultimoEstado;
+    const cambioConexion = ultimaConexion !== ultimaConexionRegistrada;
 
-    if (grupo) {
-      await grupo.sendMessage(mensaje);
-      console.log('✅ Estado enviado al grupo');
+    // Solo actuar si hay cambios
+    if (cambioEstado || cambioConexion) {
+      let mensajeEstado = '';
+      
+      if (cambioEstado) {
+        mensajeEstado = estaEnLinea 
+          ? `🟢 *${contact.pushname} está CONECTADO*`
+          : `🔴 *${contact.pushname} se DESCONECTÓ*`;
+      }
+
+      const mensajeConexion = `⏳ Última vez: ${ultimaConexion}`;
+      const mensajeCompleto = `${mensajeEstado}\n${mensajeConexion}\n📅 Actualizado: ${new Date().toLocaleString()}`;
+
+      const grupo = (await whatsappClient.getChats()).find(chat => 
+        chat.isGroup && chat.name.toLowerCase() === grupoDestino.toLowerCase()
+      );
+
+      if (grupo) {
+        await grupo.sendMessage(mensajeCompleto);
+        console.log('✅ Estado actualizado enviado al grupo');
+        
+        // Actualizar registros
+        ultimoEstado = estaEnLinea;
+        ultimaConexionRegistrada = ultimaConexion;
+      }
     }
   } catch (error) {
     console.error('Error en verificación:', error);
