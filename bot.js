@@ -75,6 +75,7 @@ whatsappClient.on('auth_failure', () => {
 async function verificarYEnviarEstado() {
   try {
     const contact = await whatsappClient.getContactById(targetUser);
+    console.log(contact)
     const estaEnLinea = contact.isOnline;
     const ultimaConexion = contact.lastSeen 
       ? new Date(contact.lastSeen * 1000).toLocaleString() 
