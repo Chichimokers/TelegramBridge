@@ -107,33 +107,7 @@ function iniciarProgramador() {
   console.log(`⏰ Programador activo cada ${intervalo/3600000} horas`);
 }
 
-// ================= MANEJO DE MENSAJES =================
-whatsappClient.on('message', async (msg) => {
-  try {
-    const contact = await msg.getContact();
-    const info = `📩 Nuevo mensaje de ${contact.pushname} (${contact.number}):
-🕒 ${new Date(msg.timestamp * 1000).toLocaleString()}
-📝 ${msg.body}`;
 
-    // Enviar a Telegram
-    await telegramBot.sendMessage(telegramChatId, info);
-
-    // Manejar multimedia
-    if (msg.hasMedia) {
-      const media = await msg.downloadMedia();
-      const buffer = Buffer.from(media.data, 'base64');
-      
-      const caption = `${info}\n📄 ${media.filename || 'archivo_sin_nombre'}`;
-      
-      await telegramBot.sendDocument(telegramChatId, buffer, {
-        caption,
-        filename: media.filename || `archivo_${Date.now()}`
-      });
-    }
-  } catch (error) {
-    console.error('Error procesando mensaje:', error);
-  }
-});
 
 // ================= INICIALIZACIÓN =================
 (async () => {
