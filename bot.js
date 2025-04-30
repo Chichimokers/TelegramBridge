@@ -24,8 +24,8 @@ const whatsappClient = new Client({
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   },
   authStrategy: new LocalAuth({
-    clientId: phoneNumber,
-    dataPath: path.join(__dirname, `wwebjs_sessions/${phoneNumber}`)
+    clientId: "Erne",
+    dataPath: path.join(__dirname, `wwebjs_sessions/${"Erne"}`)
   }),
   ffmpegPath: '/usr/bin/ffmpeg',
   takeoverOnConflict: true,
