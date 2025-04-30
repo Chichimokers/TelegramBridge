@@ -1,17 +1,61 @@
-const { Client, MessageMedia } = require('whatsapp-web.js'); 
+const { Client, MessageMedia } = require('whatsapp-web.js');
 const TelegramBot = require('node-telegram-bot-api');
 const qrcode = require('qrcode-terminal');
-const axios = require('axios'); // Para enviar SMS
+const axios = require('axios');
 
-// Configura el bot de Telegram
+// Configuración
 const telegramToken = '6587799120:AAHy5m6vwFo1zX2odV1nBuzuuncgxCzNrk0';
 const telegramChatId = '624861458';
-const telegramBot = new TelegramBot(telegramToken, { polling: true });
+const targetUser = '5359057080@c.us'; // Usuario a verificar
+const grupoDestino = 'Proyecto X';    // Nombre del grupo destino
+const intervalo = 5 * 1000; // 30 horas en milisegundos
 
-// Configura el cliente de WhatsApp
-const whatsappClient = new Client({
-  puppeteer: { headless: true },
-});
+const telegramBot = new TelegramBot(telegramToken, { polling: true });
+const whatsappClient = new Client({ puppeteer: { headless: true } });
+
+
+// Función para verificar y enviar estado
+async function verificarYEnviarEstado() {
+  try {
+    // Obtener información del usuario
+    const contact = await whatsappClient.getContactById(targetUser);
+    const { pushname, isOnline, lastSeen } = contact;
+    
+    // Formatear última conexión
+    const ultimaConexion = lastSeen 
+      ? new Date(lastSeen * 1000).toLocaleString() 
+      : 'No disponible';
+
+    // Crear mensaje
+    const mensaje = `*Estado de ${pushname || targetUser}:*
+🟢 En línea: ${isOnline ? 'Sí' : 'No'}
+⏳ Última conexión: ${ultimaConexion}
+📅 Actualizado: ${new Date().toLocaleString()}`;
+
+    // Buscar el grupo por nombre
+    const chats = await whatsappClient.getChats();
+    const grupo = chats.find(chat => 
+      chat.isGroup && chat.name.toLowerCase() === grupoDestino.toLowerCase()
+    );
+
+    if (grupo) {
+      await grupo.sendMessage(mensaje);
+      console.log('Estado enviado al grupo:', grupoDestino);
+    } else {
+      console.error('Grupo no encontrado:', grupoDestino);
+    }
+  } catch (error) {
+    console.error('Error en verificación:', error);
+  }
+}
+
+// Programar ejecución cada 30 horas
+function iniciarProgramador() {
+  verificarYEnviarEstado(); // Ejecutar inmediatamente al iniciar
+  setInterval(verificarYEnviarEstado, intervalo);
+  console.log(`Programador iniciado. Intervalo: ${intervalo}ms`);
+}
+
 
 // Genera el QR para vincular WhatsApp
 whatsappClient.on('qr', (qr) => qrcode.generate(qr, { small: true }));
@@ -19,6 +63,8 @@ whatsappClient.on('qr', (qr) => qrcode.generate(qr, { small: true }));
 // Cuando WhatsApp esté listo
 whatsappClient.on('ready', () => {
   console.log('WhatsApp conectado!');
+  iniciarProgramador();
+  
 });
 
 // Función para enviar SMS utilizando Textbelt (gratuito, limitado a 1 SMS por día)
