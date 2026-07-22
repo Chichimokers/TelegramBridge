@@ -1,12 +1,17 @@
 # TelegramBridge
 
-## Tecnologias
-
-- JavaScript
+## Lenguajes
+- {'size': 3662, 'node': {'name': 'JavaScript'}}
 
 ## Instalacion
 
-Clona el repositorio y sigue las instrucciones especificas del proyecto.
+```bash
+git clone https://github.com/Chichimokers/TelegramBridge.git
+cd TelegramBridge
+pip install -r requirements.txt  # o npm install
+python run.py  # o npm run dev
+```
 
 ---
-(c) 2026 Chichimokers -- https://github.com/Chichimokers/TelegramBridge
+
+(c) 2026 Chichimokers - Proyecto Privado
